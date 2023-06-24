@@ -86,4 +86,4 @@ def error(message):
 if __name__ == '__main__':
     bot.remove_webhook()
     bot.set_webhook(url=APP_URL)
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    server.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
