@@ -1,89 +1,68 @@
-import os
+import asyncio
 import logging
-import telebot
 import psycopg2
-from flask import Flask, request
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
-from config import *
+# Налаштування логування
+logging.basicConfig(level=logging.INFO)
 
-# Налаштування з'єднання з базою даних PostgreSQL
-DATABASE_URL = ''
-conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+# Налаштування з'єднання з базою даних
+conn = psycopg2.connect(database="your_database", user="your_username", password="your_password", host="your_host")
 cursor = conn.cursor()
 
-# Налаштування журналювання
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Налаштування бота
+bot = Bot(token="YOUR_TELEGRAM_BOT_TOKEN")
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
 
-# Створення екземпляру бота
-bot = telebot.TeleBot(TOKEN)
+@dp.message_handler(commands=['add'])
+async def add_command_handler(message: types.Message):
+    # Отримання параметрів команди /add
+    command_args = message.get_args()
+    if not command_args:
+        await message.reply("Не вказані параметри. Використовуйте команду /add Річ 1. Посилання.")
+        return
 
-# Створення Flask-додатку
-app = Flask(__name__)
+    # Розбиття параметрів на опис та посилання
+    try:
+        description, link = command_args.split(".")
+    except ValueError:
+        await message.reply("Неправильний формат. Використовуйте команду /add Річ 1. Посилання.")
+        return
 
-# Обробник вхідних HTTP-запитів
-@server.route(f'/{TOKEN}', methods=['POST'])
-def webhook():
-    update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
-    bot.process_new_updates([update])
-    return 'ok', 200
+    # Збереження фото з описом та посиланням в базі даних
+    # Операції з базою даних за допомогою psycopg2
 
-# Функція обробник команди /start
-@bot.message_handler(commands=['start'])
-def start(message):
-    username = message.from_user.username
-    bot.reply_to(message,f'Здоров {username}')
+    await message.reply("Фото збережено.")
 
-# Функція обробник повідомлень з фото
-@bot.message_handler(content_types=['photo'])
-def handle_photo(message):
-    photo = message.photo[-1]  # Отримуємо останнє надіслане фото
-    caption = message.caption  # Отримуємо підпис до фото (опис речі)
-    url = message.text  # Отримуємо посилання на сайт
+@dp.message_handler(commands=['shop'])
+async def shop_command_handler(message: types.Message):
+    # Отримання фото, описів та посилань з бази даних
+    # Операції з базою даних за допомогою psycopg2
 
-    # Збереження фото, опису та посилання до бази даних
-    cursor.execute("INSERT INTO items (photo_id, caption, url) VALUES (%s, %s, %s)", (photo.file_id, caption, url))
-    conn.commit()
-
-    bot.send_message(chat_id=message.chat.id, text="Річ успішно додана до магазину!")
-
-# Функція обробник команди /shop
-@bot.message_handler(commands=['shop'])
-def shop(message):
-    # Отримання всіх речей з бази даних
-    cursor.execute("SELECT * FROM items")
-    items = cursor.fetchall()
-
-    # Створення інлайн-кнопок для вибору речей
-    buttons = []
+    # Створення inline-кнопок з отриманими даними
+    inline_keyboard = []
     for item in items:
-        buttons.append(telebot.types.InlineKeyboardButton(item[2], callback_data=str(item[0])))
+        buy_button = types.InlineKeyboardButton("Купити", url=item['link'])
+        inline_keyboard.append([buy_button])
 
-    keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.add(*buttons)
+    reply_markup = types.InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
-    bot.send_message(chat_id=message.chat.id, text="Виберіть річ, яку бажаєте купити:", reply_markup=keyboard)
+    await message.reply("Виберіть товар:", reply_markup=reply_markup)
 
-# Функція обробник натискання на кнопку
-@bot.callback_query_handler(func=lambda call: True)
-def button_click(call):
-    item_id = call.data
+@dp.callback_query_handler(lambda c: c.data.startswith('prev'))
+async def prev_item_callback_handler(callback_query: types.CallbackQuery):
+    # Обробка натискання кнопки "Попереднє"
 
-    # Отримання інформації про річ за її ідентифікатором
-    cursor.execute("SELECT * FROM items WHERE id = %s", (item_id,))
-    item = cursor.fetchone()
+@dp.callback_query_handler(lambda c: c.data.startswith('next'))
+async def next_item_callback_handler(callback_query: types.CallbackQuery):
+    # Обробка натискання кнопки "Наступне"
 
-    # Відправка користувача на сайт для покупки
-    bot.send_message(chat_id=call.message.chat.id, text=f"Ви обрали річ: {item[2]}")
-    bot.send_message(chat_id=call.message.chat.id, text="Для здійснення покупки перейдіть за посиланням:")
-    bot.send_message(chat_id=call.message.chat.id, text=item[4])
+async def on_startup(dp):
+    await bot.send_message(chat_id=YOUR_CHAT_ID, text="Бот запущено")
 
-# Функція обробник помилкових вказівок
-@bot.message_handler(func=lambda message: True)
-def error(message):
-    logging.error(f"Update {message} caused error")
-
-# Запуск Flask-додатку
 if __name__ == '__main__':
-    bot.remove_webhook()
-    bot.set_webhook(url=APP_URL)
-    server.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    loop = asyncio.get_event_loop()
+    loop.create_task(on_startup(dp))
+    executor.start_polling(dp, skip_updates=True)
