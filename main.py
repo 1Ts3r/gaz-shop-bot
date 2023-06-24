@@ -21,7 +21,7 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 # Обробник вхідних HTTP-запитів
-@app.route(f'/{TOKEN}', methods=['POST'])
+@server.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
     update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
     bot.process_new_updates([update])
