@@ -30,7 +30,8 @@ def webhook():
 # Функція обробник команди /start
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(chat_id=message.chat.id, text="Вітаю! Ви можете додавати свої речі до магазину.")
+    username = message.from_user.username
+    bot.reply_to(message,f'Здоров {username}')
 
 # Функція обробник повідомлень з фото
 @bot.message_handler(content_types=['photo'])
