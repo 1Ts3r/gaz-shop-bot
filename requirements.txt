@@ -1,0 +1,3 @@
+pyTelegramBotAPI
+flash
+psycopg2
